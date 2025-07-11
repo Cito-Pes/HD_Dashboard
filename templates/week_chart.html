@@ -1,0 +1,13 @@
+<canvas id="weekBarChart"></canvas>
+<script>
+fetch('/data/week')
+    .then(response => response.json())
+    .then(data => {
+        const ctx = document.getElementById('weekBarChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: { /* Chart.js logic */ },
+            options: { /* Chart.js options */ }
+        });
+    });
+</script>

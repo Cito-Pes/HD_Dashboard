@@ -1,0 +1,13 @@
+<canvas id="monthBarChart"></canvas>
+<script>
+fetch('/data/month')
+    .then(response => response.json())
+    .then(data => {
+        const ctx = document.getElementById('monthBarChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: { /* Chart.js logic */ },
+            options: { /* Chart.js options */ }
+        });
+    });
+</script>

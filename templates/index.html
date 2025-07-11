@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>현황판</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</head>
+<body>
+    <h1 id="title">현황판</h1>
+    <div id="charts">
+        <iframe src="{{ url_for('month_chart') }}" id="month_chart"></iframe>
+        <iframe src="{{ url_for('week_chart') }}" id="week_chart"></iframe>
+        <iframe src="{{ url_for('day_chart') }}" id="day_chart"></iframe>
+        <iframe src="{{ url_for('pie_chart') }}" id="pie_chart"></iframe>
+    </div>
+</body>
+</html>
