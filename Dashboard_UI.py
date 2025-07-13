@@ -154,3 +154,5 @@ def TM_QTY():
 
 print(TM_QTY())
 
+#https://tnqkrdmssjan.tistory.com/55
+
