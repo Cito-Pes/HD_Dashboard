@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import pyodbc # MS SQL DB 연결을 위한 라이브러리
 
 import os
@@ -13,6 +16,8 @@ import pandas as pd
 from datetime import datetime
 import math
 from shiboken6 import Shiboken
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 
 
 def resource_path(relative_path):
@@ -37,6 +42,9 @@ for line in lines:
     if line[:9] == "app_ver =":
         App_Ver = line[9:]
 
+font_path = resource_path("./static/D2Coding.ttc")
+font_name = fm.FontProperties(fname = font_path).get_name()
+plt.rc('font', family = font_name)
 
 def TM_QTY():
 
@@ -91,15 +99,58 @@ def TM_QTY():
                     GROUP BY st.SaName	
                     order by st.SaName
                     """
-        print(SQL_QTY)
+        # print(SQL_QTY)
         cursor.execute(SQL_QTY)
         QTY_Result = cursor.fetchall()
-        print(QTY_Result)
+        # print(QTY_Result)
+
+        Emp = []
+        Cnt1 = []
+        Cnt2 = []
+        Cnt3 = []
+        Cnt4 = []
+        SumCnt = []
+
+        for Q in QTY_Result:
+            Emp.append(Q[0])
+            Cnt1.append(Q[1])
+            Cnt2.append(Q[2])
+            Cnt3.append(Q[3])
+            Cnt4.append(Q[4])
+            SumCnt.append(Q[5])
+
+
+        Qty_Dict = {
+            "매니져" : Emp,
+            "접수" : Cnt1,
+            "정상" : Cnt2,
+            "만기" : Cnt3,
+            "행사" : Cnt4,
+            "합" : SumCnt
+        }
+        PD_Qty = pd.DataFrame(Qty_Dict)
+
+        return PD_Qty
+
     except Exception as Err_Search_Pay:
         print(Err_Search_Pay)
         # self.ERR_MSG("Search_Pay 오류", Err_Search_Pay, bg_color="yellow", text_color="red")
+        return "Error"
     finally:
         conn.close()
 
+        print(PD_Qty)
+        plt.figure(figsize=(10, 5))
+        plt.title("000 계약현황")
+        plt.xlabel("상담 매니져")
+        plt.ylabel("채결 구좌수")
+        plt.bar(PD_Qty['매니져'], PD_Qty['접수'], label = "접수")
+        plt.bar(PD_Qty['매니져'], PD_Qty['정상'], bottom=PD_Qty['접수'], label = "정상")
+        plt.bar(PD_Qty['매니져'], PD_Qty['만기'], bottom=PD_Qty['접수']+PD_Qty['정상'], label = "만기")
+        plt.bar(PD_Qty['매니져'], PD_Qty['행사'], bottom=PD_Qty['접수']+PD_Qty['정상']+PD_Qty['만기'], label="행사")
+        plt.legend(ncol = 4)
+        plt.show()
 
-TM_QTY()
+
+print(TM_QTY())
+
