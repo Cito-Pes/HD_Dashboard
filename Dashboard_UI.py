@@ -248,8 +248,8 @@ def TM_Allowance():
         plt.show()
 
 
-# print(TM_QTY())
-print(TM_Allowance())
+print(TM_QTY())
+# print(TM_Allowance())
 
 #https://tnqkrdmssjan.tistory.com/55
 
