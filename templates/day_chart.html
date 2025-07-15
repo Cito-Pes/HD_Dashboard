@@ -1,0 +1,13 @@
+<canvas id="dayBarChart"></canvas>
+<script>
+fetch('/data/day')
+    .then(response => response.json())
+    .then(data => {
+        const ctx = document.getElementById('dayBarChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: { /* Chart.js logic */ },
+            options: { /* Chart.js options */ }
+        });
+    });
+</script>
