@@ -3,6 +3,7 @@
 
 ### Flask ###
 instance/*
+inspectionProfiles/*
 !instance/.gitignore
 .webassets-cache
 .env
