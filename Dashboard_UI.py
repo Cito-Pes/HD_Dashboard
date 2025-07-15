@@ -52,7 +52,7 @@ def TM_QTY():
         conn = pyodbc.connect(ns_conn)
         cursor = conn.cursor()
 
-        FromDate = 'CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
+        FromDate = '20250707' #CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
         ToDate = 'CONVERT(VARCHAR(8),GETDATE(),112)'
 
         SQL_QTY = f"""
@@ -130,6 +130,11 @@ def TM_QTY():
         }
         PD_Qty = pd.DataFrame(Qty_Dict)
 
+        max_pd = PD_Qty.loc[PD_Qty["합"].idxmax()]
+        # 각각의 변수에 담기
+        MAX_EMP = max_pd["매니져"]
+        MAX_QTY = max_pd["합"]
+
         return PD_Qty
 
     except Exception as Err_Search_Pay:
@@ -140,7 +145,8 @@ def TM_QTY():
         conn.close()
 
         print(PD_Qty)
-        plt.figure(figsize=(10, 5))
+        # dic = {y: x for x, y in zip(x, y)}
+        plt.figure(figsize=(6, 4))
         plt.title("000 계약현황")
         plt.xlabel("상담 매니져")
         plt.ylabel("채결 구좌수")
@@ -148,11 +154,102 @@ def TM_QTY():
         plt.bar(PD_Qty['매니져'], PD_Qty['정상'], bottom=PD_Qty['접수'], label = "정상")
         plt.bar(PD_Qty['매니져'], PD_Qty['만기'], bottom=PD_Qty['접수']+PD_Qty['정상'], label = "만기")
         plt.bar(PD_Qty['매니져'], PD_Qty['행사'], bottom=PD_Qty['접수']+PD_Qty['정상']+PD_Qty['만기'], label="행사")
-        plt.legend(ncol = 4)
+        # plt.text(PD_Qty['매니져'],MAX_QTY,'%.1f' % 20, ha='center', size = 12)
+        plt.legend(ncol = 2)
+        # plt.tick_params(axis='y', direction='inout')
+        plt.grid(True, axis='y', color = 'lightgray')
+        plt.ylim(0, MAX_QTY + 3)
+
+        for i, v in enumerate(PD_Qty['매니져']):
+            plt.text(v, PD_Qty['합'][i], PD_Qty['합'][i],  # 좌표 (x축 = v, y축 = y[0]..y[1], 표시 = y[0]..y[1])
+                     fontsize=12,
+                     color='blue',
+                     horizontalalignment='center',  # horizontalalignment (left, center, right)
+                     verticalalignment='bottom')  # verticalalignment (top, center, bottom)
+        plt.show()
+
+def TM_Allowance():
+
+    try:
+        conn = pyodbc.connect(ns_conn)
+        cursor = conn.cursor()
+
+        SQL_Allow = """
+                    select x.SaName, sum(x.xx)*0.25 as ETC from (
+                    select me.TotPay , gu.Cash_Month, me.id, me.name, me.reg_date, st.SaName, st.SaBun, case gu.G_etc_str5 when 4 then 1 when 2 then 2 end xx
+                    from member me
+                    inner join staff st on me.Charge_IDP = st.SaBun
+                    inner join goods gu on me.goods = gu.Goods_ID and gu.Cash>0 and gu.Goods_ID not like 'WEP%'
+                    left join Allowance_DT a on me.id = a.id
+                    where st.PlaceofDuty='홈쇼핑 TM'
+                    and me.MemType in ('정상','만기','행사')
+                    and me.TotPay / gu.Cash_Month >= 2
+                    and me.TotPay > 0 
+                    and a.id is null
+                    and me.reg_date >='2024-01-01'
+                    union all
+                    select me.TotPay , gu.Cash_Month, me.id, me.name, me.reg_date, st.SaName, st.SaBun, case gu.G_etc_str5 when 4 then 1 when 2 then 2 end xx
+                    from member me
+                    inner join staff st on me.Charge_IDP = st.SaBun
+                    inner join goods gu on me.goods = gu.Goods_ID and gu.Cash>0 and gu.Goods_ID like 'WEP%'
+                    left join Allowance_DT a on me.id = a.id
+                    where st.PlaceofDuty='홈쇼핑 TM'
+                    and me.MemType in ('정상','만기','행사')
+                    and me.TotPay > 0 
+                    and a.id is null
+                    and me.reg_date >='2024-01-01'
+                    ) x
+                    group by x.SaName
+                 """
+        # print(SQL_QTY)
+        cursor.execute(SQL_Allow)
+        QTY_Allow = cursor.fetchall()
+        print(QTY_Allow)
+        Emp = []
+        Cnt1 = []
+        for Q in QTY_Allow:
+            Emp.append(Q[0])
+            Cnt1.append(Q[1])
+
+        Qty_Dict = {
+            "매니져": Emp,
+            "구좌수": Cnt1}
+        PD_Qty = pd.DataFrame(Qty_Dict)
+
+        return PD_Qty
+
+    except Exception as Err_Allow:
+        print(Err_Allow)
+    finally:
+        conn.close()
+
+
+        print(PD_Qty)
+        max_pd = PD_Qty.loc[PD_Qty["구좌수"].idxmax()]
+        # 각각의 변수에 담기
+        MAX_EMP = max_pd["매니져"]
+        MAX_QTY = max_pd["구좌수"]
+
+
+        plt.figure(figsize=(6, 4))
+        plt.title("000 수수료 지급예정 구좌")
+        plt.xlabel("상담 매니져")
+        plt.ylabel("구좌수")
+        plt.bar(PD_Qty['매니져'], PD_Qty['구좌수'], label = "구좌수")
+        plt.legend(ncol = 2)
+        plt.grid(True, axis='y', color = 'lightgray')
+        plt.ylim(0, MAX_QTY+3)
+        for i, v in enumerate(PD_Qty['매니져']):
+            plt.text(v, PD_Qty['구좌수'][i], PD_Qty['구좌수'][i],  # 좌표 (x축 = v, y축 = y[0]..y[1], 표시 = y[0]..y[1])
+                     fontsize=12,
+                     color='blue',
+                     horizontalalignment='center',  # horizontalalignment (left, center, right)
+                     verticalalignment='bottom')  # verticalalignment (top, center, bottom)
         plt.show()
 
 
-print(TM_QTY())
+# print(TM_QTY())
+print(TM_Allowance())
 
 #https://tnqkrdmssjan.tistory.com/55
 
