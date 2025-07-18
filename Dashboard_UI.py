@@ -59,9 +59,7 @@ def TM_QTY():
                     SELECT st.SaName
                         , ISNULL(sum(x.cnt1),0) as 접수cnt
                         , ISNULL(sum(x.cnt2),0) as 정상cnt
-                        , ISNULL(sum(x.cnt3),0) as 만기cnt
-                        , ISNULL(sum(x.cnt4),0) as 행사cnt 
-                        , ISNULL(sum(x.cnt1),0)+ISNULL(sum(x.cnt2),0)+ISNULL(sum(x.cnt3),0)+ISNULL(sum(x.cnt4),0) as cnt
+                        , ISNULL(sum(x.cnt1),0)+ISNULL(sum(x.cnt2),0) as cnt
                     from (SELECT SaBun, SaName FROM Staff WHERE PlaceofDuty ='홈쇼핑 TM' AND BranchOffice='TM1' AND OutDate ='') st 
                     LEFT JOIN
                     (
@@ -76,30 +74,15 @@ def TM_QTY():
                     (SELECT me.Charge_IDP, me.MemberNo, 0 AS cnt1, CASE gu.G_etc_str5 WHEN 4 THEN count(me.ID)*0.25 WHEN 2 THEN count(me.ID)*0.5 END AS cnt2,0 AS cnt3, 0 AS cnt4
                     FROM [Member] me INNER JOIN goods gu ON me.Goods  = gu.Goods_ID
                     WHERE me.EventType in ('여행','크루즈') 
-                        AND me.MemType = '정상'
+                        AND me.MemType in ('정상','만기','행사')
                         AND REPLACE(me.Rec_Date,'-','') >=  {FromDate}
                         AND REPLACE(me.Rec_Date,'-','') <= {ToDate}
                     GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5) --x2 ON st.SaBun = x2.Charge_IDP
-                    union all
-                    (SELECT me.Charge_IDP, me.MemberNo, 0 AS cnt1, 0 AS cnt2, CASE gu.G_etc_str5 WHEN 4 THEN count(me.ID)*0.25 WHEN 2 THEN count(me.ID)*0.5 END AS cnt3, 0 AS cnt4
-                    FROM [Member] me INNER JOIN goods gu ON me.Goods  = gu.Goods_ID
-                    WHERE me.EventType in ('여행','크루즈') 
-                        AND me.MemType IN ('만기')
-                        AND REPLACE(me.Rec_Date,'-','') >=  {FromDate}
-                        AND REPLACE(me.Rec_Date,'-','') <= {ToDate}
-                    GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5) --x3 ON st.SaBun = x3.Charge_IDP
-                    union all
-                    (SELECT me.Charge_IDP, me.MemberNo, 0 AS cnt1, 0 AS cnt2, 0 AS cnt3, CASE gu.G_etc_str5 WHEN 4 THEN count(me.ID)*0.25 WHEN 2 THEN count(me.ID)*0.5 END AS cnt4
-                    FROM [Member] me INNER JOIN goods gu ON me.Goods  = gu.Goods_ID
-                    WHERE me.EventType in ('여행','크루즈') 
-                        AND me.MemType IN ('행사')
-                        AND REPLACE(me.Rec_Date,'-','') >=  {FromDate}
-                        AND REPLACE(me.Rec_Date,'-','') <= {ToDate}
-                    GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5)) x ON st.SaBun = x.Charge_IDP
+                    ) x ON st.SaBun = x.Charge_IDP
                     GROUP BY st.SaName	
                     order by st.SaName
                     """
-        # print(SQL_QTY)
+        print(SQL_QTY)
         cursor.execute(SQL_QTY)
         QTY_Result = cursor.fetchall()
         # print(QTY_Result)
@@ -107,25 +90,25 @@ def TM_QTY():
         Emp = []
         Cnt1 = []
         Cnt2 = []
-        Cnt3 = []
-        Cnt4 = []
+        # Cnt3 = []
+        # Cnt4 = []
         SumCnt = []
 
         for Q in QTY_Result:
             Emp.append(Q[0])
             Cnt1.append(Q[1])
             Cnt2.append(Q[2])
-            Cnt3.append(Q[3])
-            Cnt4.append(Q[4])
-            SumCnt.append(Q[5])
+            # Cnt3.append(Q[3])
+            # Cnt4.append(Q[4])
+            SumCnt.append(Q[3])
 
 
         Qty_Dict = {
             "매니져" : Emp,
             "접수" : Cnt1,
             "정상" : Cnt2,
-            "만기" : Cnt3,
-            "행사" : Cnt4,
+            # "만기" : Cnt3,
+            # "행사" : Cnt4,
             "합" : SumCnt
         }
         PD_Qty = pd.DataFrame(Qty_Dict)
@@ -151,9 +134,9 @@ def TM_QTY():
         plt.xlabel("상담 매니져")
         plt.ylabel("채결 구좌수")
         plt.bar(PD_Qty['매니져'], PD_Qty['접수'], label = "접수")
-        plt.bar(PD_Qty['매니져'], PD_Qty['정상'], bottom=PD_Qty['접수'], label = "정상")
-        plt.bar(PD_Qty['매니져'], PD_Qty['만기'], bottom=PD_Qty['접수']+PD_Qty['정상'], label = "만기")
-        plt.bar(PD_Qty['매니져'], PD_Qty['행사'], bottom=PD_Qty['접수']+PD_Qty['정상']+PD_Qty['만기'], label="행사")
+        plt.bar(PD_Qty['매니져'], PD_Qty['정상'], bottom=PD_Qty['접수'], label = "계약")
+        # plt.bar(PD_Qty['매니져'], PD_Qty['만기'], bottom=PD_Qty['접수']+PD_Qty['정상'], label = "만기")
+        # plt.bar(PD_Qty['매니져'], PD_Qty['행사'], bottom=PD_Qty['접수']+PD_Qty['정상']+PD_Qty['만기'], label="행사")
         # plt.text(PD_Qty['매니져'],MAX_QTY,'%.1f' % 20, ha='center', size = 12)
         plt.legend(ncol = 2)
         # plt.tick_params(axis='y', direction='inout')
