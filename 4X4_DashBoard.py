@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import sys,os
 import time
 import threading
@@ -5,7 +8,7 @@ import pyodbc
 
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QGridLayout
+    QApplication, QWidget, QGridLayout, QLabel
 )
 from PySide6.QtGui import QIcon, QBrush
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -13,6 +16,7 @@ from matplotlib.figure import Figure
 
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+
 
 def resource_path(relative_path):
     try:
@@ -36,6 +40,11 @@ for line in lines:
     if line[:9] == "app_ver =":
         App_Ver = line[9:]
 
+global TDate, WDate, MDate
+TDate=""
+WDate=""
+MDate=""
+
 font_path = resource_path("./static/D2Coding.ttc")
 font_name = fm.FontProperties(fname = font_path).get_name()
 plt.rc('font', family = font_name)
@@ -44,6 +53,25 @@ def get_db_connection():
     """MSSQL 연결 생성."""
     return pyodbc.connect(ns_conn, timeout=5)
 
+def get_DATE_SET():
+    global TDate, WDate, MDate
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    SQL_DATE = """
+                            SELECT
+                            CONVERT(VARCHAR, GETDATE(), 112) AS 오늘,
+                            CONVERT(VARCHAR, DATEADD(wk,DATEDIFF(wk,7,GETDATE()),0), 112) AS 이번주_첫_월요일,
+                            CONVERT(VARCHAR, DATEADD(mm,DATEDIFF(mm,0,GETDATE()),0), 112) AS 이번달_첫날;    
+                            """
+    cursor.execute(SQL_DATE)
+    Date_SET = cursor.fetchone()
+    TDate = Date_SET[0]
+    WDate = Date_SET[1]
+    MDate = Date_SET[2]
+    print("Date_SET", TDate, WDate, MDate)
+    cursor.close()
+    conn.close()
+    return TDate, WDate, MDate
 
 # 2. 쓰레드 클래스 정의
 class QueryWorker(QThread):
@@ -63,7 +91,6 @@ class QueryWorker(QThread):
             rows = cursor.fetchall()
             self.data_ready.emit(rows)
             time.sleep(self.interval)
-
         cursor.close()
         conn.close()
 
@@ -90,6 +117,7 @@ class DashboardWindow(QWidget):
         self.canvas_monthly = self._create_canvas("월간 실적")
         self.canvas_fees = self._create_canvas("수수료 정산 실적")
 
+
         # 그리드 배치 (2행 2열)
         layout.addWidget(self.canvas_daily,   0, 0)
         layout.addWidget(self.canvas_weekly,  0, 1)
@@ -108,16 +136,24 @@ class DashboardWindow(QWidget):
         return canvas
 
     def Make_SQL(self, Type: str):
+        global TDate, WDate, MDate
 
-        if Type == 'DAY':
-            FromDate = '20250718'  # CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
-        elif Type == 'WEEK':
-            FromDate = '20250714'  # CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
-        elif Type =='MONTH':
-            FromDate = '20250607'  # CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
+        self.Type = Type
+
+        TDate, WDate, MDate = get_DATE_SET()
+
+        print("SET", TDate, WDate, MDate)
 
 
-        ToDate = 'CONVERT(VARCHAR(8),GETDATE(),112)'
+        if self.Type == 'DAY':
+            self.FromDate = TDate #'20250718'  # CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
+        elif self.Type == 'WEEK':
+            self.FromDate = WDate #'20250714'  # CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
+        elif self.Type =='MONTH':
+            self.FromDate = MDate #'20250607'  # CONVERT(VARCHAR(8),dateadd(MONTH,-3,GETDATE()),112 )'
+
+
+        self.ToDate = TDate #'CONVERT(VARCHAR(8),GETDATE(),112)'
 
         SQL_QTY = f"""
                             SELECT st.SaName
@@ -131,21 +167,21 @@ class DashboardWindow(QWidget):
                             FROM [Member] me INNER JOIN goods gu ON me.Goods  = gu.Goods_ID
                             WHERE me.EventType in ('여행','크루즈') 
                                 AND me.MemType ='접수'
-                                AND REPLACE(me.Rec_Date,'-','') >=  {FromDate}
-                                AND REPLACE(me.Rec_Date,'-','') <= {ToDate}
+                                AND REPLACE(me.Rec_Date,'-','') >=  '{self.FromDate}'
+                                AND REPLACE(me.Rec_Date,'-','') <= '{self.ToDate}'
                             GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5) --x1 ON st.SaBun = x1.Charge_IDP
                             union all
                             (SELECT me.Charge_IDP, me.MemberNo, 0 AS cnt1, CASE gu.G_etc_str5 WHEN 4 THEN count(me.ID)*0.25 WHEN 2 THEN count(me.ID)*0.5 END AS cnt2,0 AS cnt3, 0 AS cnt4
                             FROM [Member] me INNER JOIN goods gu ON me.Goods  = gu.Goods_ID
                             WHERE me.EventType in ('여행','크루즈') 
                                 AND me.MemType in ('정상','만기','행사')
-                                AND REPLACE(me.Rec_Date,'-','') >=  {FromDate}
-                                AND REPLACE(me.Rec_Date,'-','') <= {ToDate}
+                                AND REPLACE(me.Rec_Date,'-','') >=  '{self.FromDate}'
+                                AND REPLACE(me.Rec_Date,'-','') <= '{self.ToDate}'
                             GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5) --x2 ON st.SaBun = x2.Charge_IDP
                             ) x ON st.SaBun = x.Charge_IDP
                             GROUP BY st.SaName	
                             order by st.SaName
-                            """
+                                    """
         return SQL_QTY
     def _start_workers(self):
         """각각의 SQL과 인터벌을 설정하여 쓰레드를 시작."""
@@ -200,71 +236,89 @@ class DashboardWindow(QWidget):
                   self.worker_monthly, self.worker_fees):
             w.start()
 
+
     def _update_daily_plot(self, rows):
+        global TDate, WDate, MDate
         print(rows)
-        self._update_plot(self.canvas_daily, rows, xlabel="", ylabel="구좌", Barnum=2, title='일간실적')
+        self._update_plot(self.canvas_daily, rows, xlabel="", ylabel="구좌", Barnum=2, title='일간실적', T_Date = TDate, F_Date=TDate, GType = "DAY")
 
     def _update_weekly_plot(self, rows):
-        self._update_plot(self.canvas_weekly, rows, xlabel="", ylabel="구좌", Barnum=2, title='주간실적')
+        self._update_plot(self.canvas_weekly, rows, xlabel="", ylabel="구좌", Barnum=2, title='주간실적', T_Date = TDate, F_Date=WDate, GType = "WEEK")
 
     def _update_monthly_plot(self, rows):
-        self._update_plot(self.canvas_monthly, rows, xlabel="", ylabel="구좌", Barnum=2, title='월간실적')
+        self._update_plot(self.canvas_monthly, rows, xlabel="", ylabel="구좌", Barnum=2, title='월간실적', T_Date = TDate, F_Date=MDate, GType = "MONTH")
 
     def _update_fees_plot(self, rows):
-        self._update_plot(self.canvas_fees, rows, xlabel="", ylabel="구좌", Barnum=1, title='정산구좌')
+        self._update_plot(self.canvas_fees, rows, xlabel="", ylabel="구좌", Barnum=1, title='정산 예정 구좌 (2회차 입금 구좌)', T_Date = "", F_Date="", GType = "ALLOW")
 
-    def _update_plot(self, canvas: FigureCanvas, rows, xlabel: str, ylabel: str , Barnum: int, title:str):
+    def _update_plot(self, canvas: FigureCanvas, rows, xlabel: str, ylabel: str , Barnum: int, title:str, F_Date:str, T_Date:str, GType:str):
         xs = [r[0] for r in rows]
-        if Barnum == 1:
+        if GType == "ALLOW":
             ys = [r[1] for r in rows]
-            ys3 = ys
+            ys_max = ys
         else:
             ys = [r[1] for r in rows]
             ys2 = [r[2] for r in rows]
             ys3 = [r[3] for r in rows]
+            ys_max = ys3
+
+        if GType == "DAY":
+            title = f"{T_Date[:4]}년 {T_Date[4:6]}월 {T_Date[6:8]}일 실적"
+        if GType == "MONTH":
+            title = f"{F_Date[:4]}년 {F_Date[4:6]}월 월간실적"
+        if GType == "WEEK":
+            title = f"주간실적 ({F_Date[:4]}년{F_Date[4:6]}월{F_Date[6:8]}일 ~ {T_Date[:4]}년{T_Date[4:6]}월{T_Date[6:8]}일)"
+        if GType == "ALLPW":
+            title = title
+
+        print("Gtype:", GType, F_Date, T_Date)
 
         ax = canvas.ax
-
         ax.clear()
 
         # 1) 타이틀 설정
-        ax.set_title(title, fontsize=12)
+        ax.set_title(title, fontsize=24)
 
         # 막대그래프(bar chart)로 변경
         if Barnum == 1:
             ax.bar(xs, ys, label = "인정구좌")
+            ax.axhspan(0,30, color='red', alpha=0.1)
         else:
-            ax.bar(xs, ys, label = 'aa')  # , color='skyblue', edgecolor='gray')
-            ax.bar(xs, ys2, bottom=ys, label='bb')  # , color='skyblue', edgecolor='gray')
+            ax.bar(xs, ys, label = '접수')  # , color='skyblue', edgecolor='gray')
+            ax.bar(xs, ys2, bottom=ys, label='계약')  # , color='skyblue', edgecolor='gray')
         # x축 레이블 글자가 겹치지 않도록 회전
         ax.set_xticks(xs)
-        ax.set_xticklabels(xs, rotation=45, ha='right')
+        ax.set_xticklabels(xs, rotation=30, ha='center', fontsize=16)
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
 
         ax.grid(True, axis='y', linestyle='--', alpha=0.7)
+        if ys_max == 0:
+            Max_Y = 10
+        else:
+            Max_Y = float(max(ys_max))+float(max(ys_max))*0.1
 
-        Max_Y = max(ys3)
-        # plt.ylim(0,1000)
-        #ax.set_ylim(0, float(Max_Y + Max_Y*0.1))
-
-        print(type(Max_Y))
-        print(type(Max_Y*0.1))
-
-        # ax.set_ylim(0,Max_Y+Max_Y*0.1)
+        ax.set_ylim(0,Max_Y)
 
 
         # 5) 범례 표시
         ax.legend(loc='upper right', fontsize=9, frameon=True)
 
         # 레이아웃 조정
+        box1 = {'boxstyle': 'round,pad=0.2', 'ec': (1.0, 0.5, 0.5), 'fc': (1.0, 0.8, 0.8), 'linewidth': 2}
         canvas.figure.tight_layout()
-        for x, y in zip(xs, ys3):
-            ax.text(x, y, f"{y}",fontsize=12,
-                     color='blue',
-                     horizontalalignment='center',  # horizontalalignment (left, center, right)
-                     verticalalignment='bottom')  # verticalalignment (top, center, bottom))
+        for x, y in zip(xs, ys_max):
+            if y == max(ys_max):
+                ax.text(x, y, f"{y}", fontsize=16,
+                        color='#dc00ff',
+                        horizontalalignment='center',  # horizontalalignment (left, center, right)
+                        verticalalignment='bottom', bbox=box1)  # verticalalignment (top, center, bottom))
+            else:
+                ax.text(x, y, f"{y}",fontsize=16,
+                         color='blue',
+                         horizontalalignment='center',  # horizontalalignment (left, center, right)
+                         verticalalignment='bottom')  # verticalalignment (top, center, bottom))
         canvas.draw()
 
 
@@ -281,5 +335,6 @@ class DashboardWindow(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     win = DashboardWindow()
-    win.show()
+    # win.show()
+    win.showFullScreen()
     sys.exit(app.exec())
