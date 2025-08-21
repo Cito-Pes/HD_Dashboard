@@ -22,7 +22,8 @@ for line in lines:
     if line[:9] == "app_ver =":
         App_Ver = line[9:]
 
-os.environ['NLS_LANG'] = '.UTF8'  # 또는 os.environ['PYTHONIOENCODING'] = 'utf-8'
+# os.environ['NLS_LANG'] = '.UTF8'  # 또는
+os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 # 현재 가상환경(.venv)의 루트
 venv_root = sys.prefix
