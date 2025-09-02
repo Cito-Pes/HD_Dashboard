@@ -1,17 +1,72 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-    <title>현황판</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  <meta charset="UTF-8">
+  <title>{{ title }}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fafafa;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      padding: 10px;
+    }
+    .panel {
+      position: relative;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #ddd;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .panel img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
 </head>
 <body>
-    <h1 id="title">현황판</h1>
-    <div id="charts">
-        <iframe src="{{ url_for('month_chart') }}" id="month_chart"></iframe>
-        <iframe src="{{ url_for('week_chart') }}" id="week_chart"></iframe>
-        <iframe src="{{ url_for('day_chart') }}" id="day_chart"></iframe>
-        <iframe src="{{ url_for('pie_chart') }}" id="pie_chart"></iframe>
+
+  <div class="grid">
+    <div class="panel">
+      <img id="dayImg"   src="{{ url_for('plot_png', period='day') }}"   alt="일간 실적">
     </div>
+    <div class="panel">
+      <img id="weekImg"  src="{{ url_for('plot_png', period='week') }}"  alt="주간 실적">
+    </div>
+    <div class="panel">
+      <img id="monthImg" src="{{ url_for('plot_png', period='month') }}" alt="월간 실적">
+    </div>
+    <div class="panel">
+      <img id="feesImg"  src="{{ url_for('plot_png', period='fees') }}"  alt="수수료 정산 실적">
+    </div>
+  </div>
+
+  <script>
+    // 이미지 깜박임 없이 주기 갱신
+    const panels = [
+      { id: 'dayImg',   period: 'day',   interval: 30  },
+      { id: 'weekImg',  period: 'week',  interval: 30  },
+      { id: 'monthImg', period: 'month', interval: 30  },
+      { id: 'feesImg',  period: 'fees',  interval: 400 }
+    ];
+
+    function refreshImage(panel) {
+      const imgEl = document.getElementById(panel.id);
+      const tmp   = new Image();
+      tmp.onload  = () => imgEl.src = tmp.src;
+      tmp.src     = `/plot/${panel.period}.png?t=${Date.now()}`;
+    }
+
+    panels.forEach(panel => {
+      // 첫 갱신 예약
+      setInterval(() => refreshImage(panel), panel.interval * 1000);
+    });
+  </script>
+
 </body>
 </html>
