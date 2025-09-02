@@ -122,6 +122,7 @@ def make_sql(period: str):
                 AND me.reg_date >= '2024-01-01'
             ) x
             GROUP BY x.SaName
+            --
         """
 
     # 일간/주간/월간 실적 SQL

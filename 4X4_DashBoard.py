@@ -283,7 +283,6 @@ class DashboardWindow(QWidget):
         for w in (self.worker_daily, self.worker_weekly, self.worker_monthly, self.worker_fees):
             w.start()
 
-
     def _update_daily_plot(self, rows):
         global TDate, WDate, MDate,now
         print(now, rows)
