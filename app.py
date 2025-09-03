@@ -1,13 +1,23 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import os
 import sys
 import time
-# import pyodbc
+import pyodbc
 import pymssql
 from io import BytesIO
 from flask import Flask, Response, render_template
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+import datetime
+
+global TDate, WDate, MDate, now, ToDay
+TDate=""
+WDate=""
+MDate=""
+now = ""
+ToDay = 0
 
 # ─── 리소스 경로 헬퍼 ─────────────────────────────────────────────
 def resource_path(relative_path):
@@ -47,10 +57,10 @@ plt.rc("font", family=font_prop.get_name())
 
 # ─── DB 연결 & 날짜 세트 가져오기 ─────────────────────────────────
 def get_db_connection():
-    # return pyodbc.connect(ns_conn, timeout=5)
+    return pyodbc.connect(ns_conn, timeout=5)
     # pysql_conn = "host=211.239.164.106,50106;database=HDTourZone;user=sa;password=sjpw_hdtourzone106"
     # print(pysql_conn)
-    return pymssql.connect(host='211.239.164.106:50106', database='HDTourZone', user='sa', password='sjpw_hdtourzone106', tds_version='7.0')
+    # return pymssql.connect(host='211.239.164.106:50106', database='HDTourZone', user='sa', password='sjpw_hdtourzone106', tds_version='7.0')
 
 
 def get_DATE_SET():
@@ -58,7 +68,7 @@ def get_DATE_SET():
     SQL_DATE = """
         SELECT
           CONVERT(VARCHAR, GETDATE(), 112),
-          CONVERT(VARCHAR, DATEADD(wk,DATEDIFF(wk,7,GETDATE()),0), 112),
+          CONVERT(VARCHAR, DATEADD(wk,DATEDIFF(wk,0,GETDATE()),0), 112),
           CONVERT(VARCHAR, DATEADD(mm,DATEDIFF(mm,0,GETDATE()),0), 112);
     """
     conn = get_db_connection()
@@ -71,7 +81,18 @@ def get_DATE_SET():
 
 # ─── SQL 생성 함수 ───────────────────────────────────────────────
 def make_sql(period: str):
-    TDate, WDate, MDate = get_DATE_SET()
+    global TDate, WDate, MDate, now, ToDay
+    # TDate, WDate, MDate = get_DATE_SET()
+
+    now = datetime.datetime.now()
+    today = datetime.datetime.today()
+    weekday = today.weekday()
+
+    TDate = now.strftime("%Y%m%d")
+    WDate = today - datetime.timedelta(days=weekday)
+    WDate = WDate.strftime("%Y%m%d")
+    MDate = datetime.datetime(now.year, now.month, 1).strftime("%Y%m%d")
+    ToDay = datetime.datetime.today()
 
     if period == "day":
         FromDate, ToDate = TDate, TDate
@@ -81,49 +102,63 @@ def make_sql(period: str):
         FromDate, ToDate = MDate, TDate
     else:
         # 수수료 정산 실적 SQL
-        return """
-            SELECT x.SaName, SUM(x.xx)*0.25 AS ETC
-            FROM (
-              SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
-                     st.SaName, st.SaBun,
-                     CASE gu.G_etc_str5 WHEN 4 THEN 1 WHEN 2 THEN 2 END xx
-              FROM member me
-              INNER JOIN staff st
-                ON me.Charge_IDP = st.SaBun
-              INNER JOIN goods gu
-                ON me.goods = gu.Goods_ID
-               AND gu.Cash > 0
-               AND gu.Goods_ID NOT LIKE 'WEP%'
-              LEFT JOIN Allowance_DT a ON me.id = a.id
-              WHERE st.PlaceofDuty='홈쇼핑 TM'
-                AND me.MemType IN ('정상','만기','행사')
-                AND me.TotPay / gu.Cash_Month >= 2
-                AND me.TotPay > 0
-                AND a.id IS NULL
-                AND me.reg_date >= '2024-01-01'
-
-              UNION ALL
-
-              SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
-                     st.SaName, st.SaBun,
-                     CASE gu.G_etc_str5 WHEN 4 THEN 1 WHEN 2 THEN 2 END xx
-              FROM member me
-              INNER JOIN staff st
-                ON me.Charge_IDP = st.SaBun
-              INNER JOIN goods gu
-                ON me.goods = gu.Goods_ID
-               AND gu.Cash > 0
-               AND gu.Goods_ID LIKE 'WEP%'
-              LEFT JOIN Allowance_DT a ON me.id = a.id
-              WHERE st.PlaceofDuty='홈쇼핑 TM'
-                AND me.MemType IN ('정상','만기','행사')
-                AND me.TotPay > 0
-                AND a.id IS NULL
-                AND me.reg_date >= '2024-01-01'
-            ) x
-            GROUP BY x.SaName
-            --
-        """
+        if ToDay.day <= 7:
+            return """
+                select st.SaName, (a.cnt-isnull(ra.rcnt,0))*0.25 as ETC
+                from
+                staff st 
+                left join (select sabun, count(id) as cnt FROM  Allowance_GCnt_DT where apmonth=CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) and aptype='신규구좌' group by sabun) a on st.SaBun = a.SaBun
+                left join (select sabun, count(id) as rcnt from Allowance_GCntr_DT where apmonth = CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) group by sabun) ra on st.SaBun = ra.SaBun
+                where 
+                st.PlaceofDuty='홈쇼핑 TM' 
+                and st.SaBun not in ('015101','015102','CJ-SHOP','HN-SHOP','K-SHOP','LO-SHOP')
+                and st.OutDate =''
+                order by st.SaName
+                """
+        else:
+            return """
+                SELECT x.SaName, SUM(x.xx)*0.25 AS ETC
+                FROM (
+                  SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
+                         st.SaName, st.SaBun,
+                         CASE gu.G_etc_str5 WHEN 4 THEN 1 WHEN 2 THEN 2 END xx
+                  FROM member me
+                  INNER JOIN staff st
+                    ON me.Charge_IDP = st.SaBun
+                  INNER JOIN goods gu
+                    ON me.goods = gu.Goods_ID
+                   AND gu.Cash > 0
+                   AND gu.Goods_ID NOT LIKE 'WEP%'
+                  LEFT JOIN Allowance_DT a ON me.id = a.id
+                  WHERE st.PlaceofDuty='홈쇼핑 TM'
+                    AND me.MemType IN ('정상','만기','행사')
+                    AND me.TotPay / gu.Cash_Month >= 2
+                    AND me.TotPay > 0
+                    AND a.id IS NULL
+                    AND me.reg_date >= '2024-01-01'
+    
+                  UNION ALL
+    
+                  SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
+                         st.SaName, st.SaBun,
+                         CASE gu.G_etc_str5 WHEN 4 THEN 1 WHEN 2 THEN 2 END xx
+                  FROM member me
+                  INNER JOIN staff st
+                    ON me.Charge_IDP = st.SaBun
+                  INNER JOIN goods gu
+                    ON me.goods = gu.Goods_ID
+                   AND gu.Cash > 0
+                   AND gu.Goods_ID LIKE 'WEP%'
+                  LEFT JOIN Allowance_DT a ON me.id = a.id
+                  WHERE st.PlaceofDuty='홈쇼핑 TM'
+                    AND me.MemType IN ('정상','만기','행사')
+                    AND me.TotPay > 0
+                    AND a.id IS NULL
+                    AND me.reg_date >= '2024-01-01'
+                ) x
+                GROUP BY x.SaName
+                --
+            """
 
     # 일간/주간/월간 실적 SQL
     return f"""
@@ -170,7 +205,9 @@ def make_sql(period: str):
 
 # ─── 그래프 생성 함수 ───────────────────────────────────────────────
 def create_figure(period: str):
+    global TDate, WDate, MDate, now, ToDay
     sql    = make_sql(period)
+    # print(sql)
     conn   = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(sql)
@@ -181,7 +218,7 @@ def create_figure(period: str):
     # 이름(x축) 추출
     names = [r[0] for r in rows]
     cmap = COLOR_MAP.get(period, {})
-
+    # print(rows)
     # y값을 float로 변환
     if period == "fees":
         ys      = [float(r[1]) for r in rows]  # ETC
@@ -204,16 +241,19 @@ def create_figure(period: str):
     fig, ax = plt.subplots(figsize=(9.6, 5.4), dpi=100)
 
     # 제목 설정 (기존 로직 유지)
-    TDate, WDate, MDate = get_DATE_SET()
+    # TDate, WDate, MDate = get_DATE_SET()
     if period == "day":
-        title = f"{TDate[:4]}년 {TDate[4:6]}월 {TDate[6:8]}일 실적"
+        title = f"{TDate[:4]}년 {TDate[4:6]}월 {TDate[6:8]}일 실적 "
     elif period == "week":
         title = f"주간실적 ({WDate[:4]}년{WDate[4:6]}월{WDate[6:8]}일 ~ "
         title += f"{TDate[:4]}년{TDate[4:6]}월{TDate[6:8]}일)"
     elif period == "month":
         title = f"{MDate[:4]}년 {MDate[4:6]}월 월간실적"
     else:
-        title = "정산 예정 구좌 (2회차 입금 구좌)"
+        if ToDay.day <=7 :
+            title = f'{str(int(MDate[4:6])-1)}월 정산 예정 구좌 (2회차 입금 구좌)'
+        else:
+            title = "정산 예정 구좌 (2회차 입금 구좌)"
     ax.set_title(title, fontsize=24)
 
     # 막대그래프 그리기
@@ -267,4 +307,4 @@ def plot_png(period):
     return Response(buf.getvalue(), mimetype="image/png")
 
 if __name__ == "__main__":
-    app.run('0.0.0.0',port=2500,debug=True)
+    app.run('0.0.0.0',port=2500,debug=False)

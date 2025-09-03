@@ -16,8 +16,6 @@ from matplotlib.figure import Figure
 
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-# from datetime import datetime
-import datetime
 
 
 def resource_path(relative_path):
@@ -42,12 +40,10 @@ for line in lines:
     if line[:9] == "app_ver =":
         App_Ver = line[9:]
 
-global TDate, WDate, MDate, now, i
+global TDate, WDate, MDate
 TDate=""
 WDate=""
 MDate=""
-now = ""
-i = 0
 
 font_path = resource_path("./static/D2Coding.ttc")
 font_name = fm.FontProperties(fname = font_path).get_name()
@@ -57,6 +53,25 @@ def get_db_connection():
     """MSSQL 연결 생성."""
     return pyodbc.connect(ns_conn, timeout=5)
 
+def get_DATE_SET():
+    global TDate, WDate, MDate
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    SQL_DATE = """
+                            SELECT
+                            CONVERT(VARCHAR, GETDATE(), 112) AS 오늘,
+                            CONVERT(VARCHAR, DATEADD(wk,DATEDIFF(wk,7,GETDATE()),0), 112) AS 이번주_첫_월요일,
+                            CONVERT(VARCHAR, DATEADD(mm,DATEDIFF(mm,0,GETDATE()),0), 112) AS 이번달_첫날;
+                            """
+    cursor.execute(SQL_DATE)
+    Date_SET = cursor.fetchone()
+    TDate = Date_SET[0]
+    WDate = Date_SET[1]
+    MDate = Date_SET[2]
+    print("Date_SET", TDate, WDate, MDate)
+    cursor.close()
+    conn.close()
+    return TDate, WDate, MDate
 
 # 2. 쓰레드 클래스 정의
 class QueryWorker(QThread):
@@ -69,24 +84,9 @@ class QueryWorker(QThread):
         self._running = True
 
     def run(self):
-        global TDate, WDate, MDate, now, i
         conn = get_db_connection()
         cursor = conn.cursor()
         while self._running:
-
-
-            now = datetime.datetime.now()
-            today = datetime.datetime.today()
-            weekday = today.weekday()
-
-            TDate = now.strftime("%Y%m%d")
-            WDate = today - datetime.timedelta(days=weekday)
-            WDate = WDate.strftime("%Y%m%d")
-            MDate = datetime.datetime(now.year, now.month, 1).strftime("%Y%m%d")
-            i = i + 1
-
-
-            print("DATE::::::::",TDate, WDate, MDate, now, i)
             cursor.execute(self.query)
             rows = cursor.fetchall()
             self.data_ready.emit(rows)
@@ -126,20 +126,6 @@ class DashboardWindow(QWidget):
 
         self.setLayout(layout)
 
-    def Make_Date(self):
-        global TDate, WDate, MDate, now, i
-
-        now = datetime.datetime.now()
-        today = datetime.datetime.today()
-        weekday = today.weekday()
-
-
-        TDate = now.strftime("%Y%m%d")
-        WDate = today - datetime.timedelta(days=weekday)
-        WDate = WDate.strftime("%Y%m%d")
-        MDate = datetime.datetime(now.year, now.month, 1).strftime("%Y%m%d")
-        i = i+1
-
     def _create_canvas(self, title: str) -> FigureCanvas:
         """Matplotlib 캔버스 생성 및 타이틀 설정."""
         fig = Figure(figsize=(9.6, 5.4), dpi=100)  # 1920x1080 해상도 기준
@@ -150,23 +136,13 @@ class DashboardWindow(QWidget):
         return canvas
 
     def Make_SQL(self, Type: str):
-        global TDate, WDate, MDate, now
+        global TDate, WDate, MDate
 
         self.Type = Type
 
+        TDate, WDate, MDate = get_DATE_SET()
 
-
-        # now = datetime.datetime.now()
-        # today = datetime.datetime.today()
-        # weekday = today.weekday()
-        #
-        #
-        # TDate = now.strftime("%Y%m%d")
-        # WDate = today - datetime.timedelta(days=weekday)
-        # WDate = WDate.strftime("%Y%m%d")
-        # MDate = datetime.datetime(now.year, now.month, 1).strftime("%Y%m%d")
-
-        print("SET", now, TDate, WDate, MDate)
+        print("SET", TDate, WDate, MDate)
 
 
         if self.Type == 'DAY':
@@ -180,16 +156,16 @@ class DashboardWindow(QWidget):
         self.ToDate = TDate #'CONVERT(VARCHAR(8),GETDATE(),112)'
 
         SQL_QTY = f"""
-                            SELECT st.SaName+'{now}'
+                            SELECT st.SaName
                                 , ISNULL(sum(x.cnt1),0) as 접수cnt
                                 , ISNULL(sum(x.cnt2),0) as 정상cnt
                                 , ISNULL(sum(x.cnt1),0)+ISNULL(sum(x.cnt2),0) as cnt
-                            from (SELECT SaBun, SaName FROM Staff WHERE PlaceofDuty ='홈쇼핑 TM' AND BranchOffice='TM1' AND OutDate ='') st 
+                            from (SELECT SaBun, SaName FROM Staff WHERE PlaceofDuty ='홈쇼핑 TM' AND BranchOffice='TM1' AND OutDate ='') st
                             LEFT JOIN
                             (
                             (SELECT me.Charge_IDP, me.MemberNo, CASE gu.G_etc_str5 WHEN 4 THEN count(me.ID)*0.25 WHEN 2 THEN count(me.ID)*0.5 END AS cnt1,0 AS cnt2,0 AS cnt3, 0 AS cnt4
                             FROM [Member] me INNER JOIN goods gu ON me.Goods  = gu.Goods_ID
-                            WHERE me.EventType in ('여행','크루즈') 
+                            WHERE me.EventType in ('여행','크루즈')
                                 AND me.MemType ='접수'
                                 AND REPLACE(me.Rec_Date,'-','') >=  '{self.FromDate}'
                                 AND REPLACE(me.Rec_Date,'-','') <= '{self.ToDate}'
@@ -197,40 +173,24 @@ class DashboardWindow(QWidget):
                             union all
                             (SELECT me.Charge_IDP, me.MemberNo, 0 AS cnt1, CASE gu.G_etc_str5 WHEN 4 THEN count(me.ID)*0.25 WHEN 2 THEN count(me.ID)*0.5 END AS cnt2,0 AS cnt3, 0 AS cnt4
                             FROM [Member] me INNER JOIN goods gu ON me.Goods  = gu.Goods_ID
-                            WHERE me.EventType in ('여행','크루즈') 
+                            WHERE me.EventType in ('여행','크루즈')
                                 AND me.MemType in ('정상','만기','행사')
                                 AND REPLACE(me.Rec_Date,'-','') >=  '{self.FromDate}'
                                 AND REPLACE(me.Rec_Date,'-','') <= '{self.ToDate}'
                             GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5) --x2 ON st.SaBun = x2.Charge_IDP
                             ) x ON st.SaBun = x.Charge_IDP
-                            GROUP BY st.SaName	
+                            GROUP BY st.SaName
                             order by st.SaName
-                            -- {now}
                                     """
-        print(SQL_QTY)
         return SQL_QTY
     def _start_workers(self):
         """각각의 SQL과 인터벌을 설정하여 쓰레드를 시작."""
-        global TDate, WDate, MDate, now, i
 
-        # now = datetime.datetime.now()
-        # today = datetime.datetime.today()
-        # weekday = today.weekday()
-        #
-        # TDate = now.strftime("%Y%m%d")
-        # WDate = today - datetime.timedelta(days=weekday)
-        # WDate = WDate.strftime("%Y%m%d")
-        # MDate = datetime.datetime(now.year, now.month, 1).strftime("%Y%m%d")
-
-        self.Make_Date()
-
-        print("SET22222222222", now, TDate, WDate, MDate)
 
         # 예시 SQL. 실제 환경에 맞게 수정하세요.
         daily_sql   = self.Make_SQL('DAY')
         weekly_sql  = self.Make_SQL('WEEK')
         monthly_sql = self.Make_SQL('MONTH')
-
         fees_sql    = """
                     select x.SaName, sum(x.xx)*0.25 as ETC from (
                     select me.TotPay , gu.Cash_Month, me.id, me.name, me.reg_date, st.SaName, st.SaBun, case gu.G_etc_str5 when 4 then 1 when 2 then 2 end xx
@@ -241,7 +201,7 @@ class DashboardWindow(QWidget):
                     where st.PlaceofDuty='홈쇼핑 TM'
                     and me.MemType in ('정상','만기','행사')
                     and me.TotPay / gu.Cash_Month >= 2
-                    and me.TotPay > 0 
+                    and me.TotPay > 0
                     and a.id is null
                     and me.reg_date >='2024-01-01'
                     union all
@@ -252,38 +212,18 @@ class DashboardWindow(QWidget):
                     left join Allowance_DT a on me.id = a.id
                     where st.PlaceofDuty='홈쇼핑 TM'
                     and me.MemType in ('정상','만기','행사')
-                    and me.TotPay > 0 
+                    and me.TotPay > 0
                     and a.id is null
                     and me.reg_date >='2024-01-01'
                     ) x
                     group by x.SaName
                  """
 
-        Allow_SQL = """
-                    select st.SaName, (a.cnt-isnull(ra.rcnt,0))*0.25 as ETC
-                    from
-                    staff st 
-                    left join (select sabun, count(id) as cnt FROM  Allowance_GCnt_DT where apmonth=CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) and aptype='신규구좌' group by sabun) a on st.SaBun = a.SaBun
-                    left join (select sabun, count(id) as rcnt from Allowance_GCntr_DT where apmonth = CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) group by sabun) ra on st.SaBun = ra.SaBun
-                    where 
-                    st.PlaceofDuty='홈쇼핑 TM' 
-                    and st.SaBun not in ('015101','015102','CJ-SHOP','HN-SHOP','K-SHOP','LO-SHOP')
-                    and st.OutDate =''
-                    order by st.SaName
-                    """
-
-        self.Q_sql = fees_sql
-        self.Allow_Title = '정산 예정 구좌 (2회차 입금 구좌)'
-
-        self.Q_sql = Allow_SQL
-        self.Allow_Title = '8월 정산 예정 구좌 (2회차 입금 구좌)'
-
-
         # 각각 업데이트 주기(초) 설정
-        self.worker_daily = QueryWorker(daily_sql,   interval_sec=5)
+        self.worker_daily = QueryWorker(daily_sql,   interval_sec=30)
         self.worker_weekly = QueryWorker(weekly_sql, interval_sec=30)
         self.worker_monthly = QueryWorker(monthly_sql, interval_sec=30)
-        self.worker_fees = QueryWorker(self.Q_sql,      interval_sec=400)
+        self.worker_fees = QueryWorker(fees_sql,      interval_sec=400)
 
         # 시그널 연결
         self.worker_daily.data_ready.connect(self._update_daily_plot)
@@ -292,14 +232,14 @@ class DashboardWindow(QWidget):
         self.worker_fees.data_ready.connect(self._update_fees_plot)
 
         # 쓰레드 시작
-        for w in (self.worker_daily, self.worker_weekly, self.worker_monthly, self.worker_fees):
-
+        for w in (self.worker_daily, self.worker_weekly,
+                  self.worker_monthly, self.worker_fees):
             w.start()
 
+
     def _update_daily_plot(self, rows):
-        global TDate, WDate, MDate, now, i
-        # self.Make_Date()
-        print(i, now, rows)
+        global TDate, WDate, MDate
+        print(rows)
         self._update_plot(self.canvas_daily, rows, xlabel="", ylabel="구좌", Barnum=2, title='일간실적', T_Date = TDate, F_Date=TDate, GType = "DAY")
 
     def _update_weekly_plot(self, rows):
@@ -309,7 +249,7 @@ class DashboardWindow(QWidget):
         self._update_plot(self.canvas_monthly, rows, xlabel="", ylabel="구좌", Barnum=2, title='월간실적', T_Date = TDate, F_Date=MDate, GType = "MONTH")
 
     def _update_fees_plot(self, rows):
-        self._update_plot(self.canvas_fees, rows, xlabel="", ylabel="구좌", Barnum=1, title=self.Allow_Title, T_Date = "", F_Date="", GType = "ALLOW")
+        self._update_plot(self.canvas_fees, rows, xlabel="", ylabel="구좌", Barnum=1, title='정산 예정 구좌 (2회차 입금 구좌)', T_Date = "", F_Date="", GType = "ALLOW")
 
     def _update_plot(self, canvas: FigureCanvas, rows, xlabel: str, ylabel: str , Barnum: int, title:str, F_Date:str, T_Date:str, GType:str):
         xs = [r[0] for r in rows]
@@ -323,7 +263,7 @@ class DashboardWindow(QWidget):
             ys_max = ys3
 
         if GType == "DAY":
-            title = f"{T_Date[:4]}년 {T_Date[4:6]}월 {T_Date[6:8]}일 실적{now}"
+            title = f"{T_Date[:4]}년 {T_Date[4:6]}월 {T_Date[6:8]}일 실적"
         if GType == "MONTH":
             title = f"{F_Date[:4]}년 {F_Date[4:6]}월 월간실적"
         if GType == "WEEK":
