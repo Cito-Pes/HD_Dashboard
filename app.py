@@ -6,11 +6,13 @@ import time
 import pyodbc
 import pymssql
 from io import BytesIO
-from flask import Flask, Response, render_template
+from flask import Flask, Response, render_template,jsonify
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import datetime
+
+
 
 global TDate, WDate, MDate, now, ToDay
 TDate=""
