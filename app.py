@@ -312,4 +312,4 @@ if __name__ == "__main__":
     # app.run('0.0.0.0',port=2500,debug=False)
     app.run()
 
-    # waitress-serve --host=0.0.0.0 --port=2500 app:app
+    # 구동방법: waitress-serve --host=0.0.0.0 --port=2500 app:app
