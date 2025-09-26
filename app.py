@@ -119,6 +119,9 @@ def make_sql(period: str):
                 """
         else:
             return """
+                SET ANSI_WARNINGS OFF
+                SET ARITHIGNORE ON
+                SET ARITHABORT OFF
                 SELECT x.SaName, SUM(x.xx)*0.25 AS ETC
                 FROM (
                   SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
@@ -131,13 +134,14 @@ def make_sql(period: str):
                     ON me.goods = gu.Goods_ID
                    AND gu.Cash > 0
                    AND gu.Goods_ID NOT LIKE 'WEP%'
-                  LEFT JOIN Allowance_DT a ON me.id = a.id
+                  LEFT JOIN (select id from Allowance_DT where APType='성과수당') a ON me.id = a.id
                   WHERE st.PlaceofDuty='홈쇼핑 TM'
                     AND me.MemType IN ('정상','만기','행사')
                     AND me.TotPay / gu.Cash_Month >= 2
                     AND me.TotPay > 0
                     AND a.id IS NULL
                     AND me.reg_date >= '2024-01-01'
+                    and st.OutDate = '' 
     
                   UNION ALL
     
@@ -151,12 +155,13 @@ def make_sql(period: str):
                     ON me.goods = gu.Goods_ID
                    AND gu.Cash > 0
                    AND gu.Goods_ID LIKE 'WEP%'
-                  LEFT JOIN Allowance_DT a ON me.id = a.id
+                  LEFT JOIN (select id from Allowance_DT where APType='성과수당') a ON me.id = a.id
                   WHERE st.PlaceofDuty='홈쇼핑 TM'
                     AND me.MemType IN ('정상','만기','행사')
                     AND me.TotPay > 0
                     AND a.id IS NULL
                     AND me.reg_date >= '2024-01-01'
+                    and st.OutDate = '' 
                 ) x
                 GROUP BY x.SaName
                 --
