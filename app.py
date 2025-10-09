@@ -124,6 +124,9 @@ def make_sql(period: str):
                 SET ARITHABORT OFF
                 SELECT x.SaName, SUM(x.xx)*0.25 AS ETC
                 FROM (
+                    select 0 as TotPay, 0 as Cash_Month, '' as id, '' as name, '' as reg_date, s.SaName, s.SaBun, 0 as xx 
+                    from staff s where s.PlaceofDuty='홈쇼핑 TM' and s.OutDate ='' and s.BranchOffice = 'TM1'
+                      union 
                   SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
                          st.SaName, st.SaBun,
                          CASE gu.G_etc_str5 WHEN 4 THEN 1 WHEN 2 THEN 2 END xx
