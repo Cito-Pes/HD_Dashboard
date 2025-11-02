@@ -86,6 +86,13 @@ def make_sql(period: str):
     global TDate, WDate, MDate, now, ToDay
     # TDate, WDate, MDate = get_DATE_SET()
 
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    SQL_Allow_YN = "select  count(id) from Allowance where POfDuty='홈쇼핑 TM' and APMonth= CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112)"
+    cursor.execute(SQL_Allow_YN)
+    Allow_CNT = cursor.fetchone()
+
+
     now = datetime.datetime.now()
     today = datetime.datetime.today()
     weekday = today.weekday()
@@ -105,18 +112,71 @@ def make_sql(period: str):
     else:
         # 수수료 정산 실적 SQL
         if ToDay.day <= 7:
-            return """
-                select st.SaName, (a.cnt-isnull(ra.rcnt,0))*0.25 as ETC
-                from
-                staff st 
-                left join (select sabun, count(id) as cnt FROM  Allowance_GCnt_DT where apmonth=CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) and aptype='신규구좌' group by sabun) a on st.SaBun = a.SaBun
-                left join (select sabun, count(id) as rcnt from Allowance_GCntr_DT where apmonth = CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) group by sabun) ra on st.SaBun = ra.SaBun
-                where 
-                st.PlaceofDuty='홈쇼핑 TM' 
-                and st.SaBun not in ('015101','015102','CJ-SHOP','HN-SHOP','K-SHOP','LO-SHOP')
-                and st.OutDate =''
-                order by st.SaName
-                """
+            if Allow_CNT[0] == 0:
+                return """
+                                SET ANSI_WARNINGS OFF
+                                SET ARITHIGNORE ON
+                                SET ARITHABORT OFF
+                                SELECT x.SaName, SUM(x.xx)*0.25 AS ETC
+                                FROM (
+                                    select 0 as TotPay, 0 as Cash_Month, '' as id, '' as name, '' as reg_date, s.SaName, s.SaBun, 0 as xx 
+                                    from staff s where s.PlaceofDuty='홈쇼핑 TM' and s.OutDate ='' and s.BranchOffice = 'TM1'
+                                      union 
+                                  SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
+                                         st.SaName, st.SaBun,
+                                         CASE gu.G_etc_str5 WHEN 4 THEN 1 WHEN 2 THEN 2 END xx
+                                  FROM member me
+                                  INNER JOIN staff st
+                                    ON me.Charge_IDP = st.SaBun
+                                  INNER JOIN goods gu
+                                    ON me.goods = gu.Goods_ID
+                                   AND gu.Cash > 0
+                                   AND gu.Goods_ID NOT LIKE 'WEP%'
+                                  LEFT JOIN (select id from Allowance_DT where APType='성과수당') a ON me.id = a.id
+                                  WHERE st.PlaceofDuty='홈쇼핑 TM'
+                                    AND me.MemType IN ('정상','만기','행사')
+                                    AND me.TotPay / gu.Cash_Month >= 2
+                                    AND me.TotPay > 0
+                                    AND a.id IS NULL
+                                    AND me.reg_date >= '2024-01-01'
+                                    and st.OutDate = '' 
+
+                                  UNION ALL
+
+                                  SELECT me.TotPay, gu.Cash_Month, me.id, me.name, me.reg_date,
+                                         st.SaName, st.SaBun,
+                                         CASE gu.G_etc_str5 WHEN 4 THEN 1 WHEN 2 THEN 2 END xx
+                                  FROM member me
+                                  INNER JOIN staff st
+                                    ON me.Charge_IDP = st.SaBun
+                                  INNER JOIN goods gu
+                                    ON me.goods = gu.Goods_ID
+                                   AND gu.Cash > 0
+                                   AND gu.Goods_ID LIKE 'WEP%'
+                                  LEFT JOIN (select id from Allowance_DT where APType='성과수당') a ON me.id = a.id
+                                  WHERE st.PlaceofDuty='홈쇼핑 TM'
+                                    AND me.MemType IN ('정상','만기','행사')
+                                    AND me.TotPay > 0
+                                    AND a.id IS NULL
+                                    AND me.reg_date >= '2024-01-01'
+                                    and st.OutDate = '' 
+                                ) x
+                                GROUP BY x.SaName
+                                --
+                            """
+            else:
+                return """
+                    select st.SaName, (a.cnt-isnull(ra.rcnt,0))*0.25 as ETC
+                    from
+                    staff st 
+                    left join (select sabun, count(id) as cnt FROM  Allowance_GCnt_DT where apmonth=CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) and aptype='신규구좌' group by sabun) a on st.SaBun = a.SaBun
+                    left join (select sabun, count(id) as rcnt from Allowance_GCntr_DT where apmonth = CONVERT(CHAR(6), DATEADD(month, -1, GETDATE()), 112) group by sabun) ra on st.SaBun = ra.SaBun
+                    where 
+                    st.PlaceofDuty='홈쇼핑 TM' 
+                    and st.SaBun not in ('015101','015102','CJ-SHOP','HN-SHOP','K-SHOP','LO-SHOP')
+                    and st.OutDate =''
+                    order by st.SaName
+                    """
         else:
             return """
                 SET ANSI_WARNINGS OFF
@@ -212,6 +272,8 @@ def make_sql(period: str):
         GROUP BY st.SaName
         ORDER BY st.SaName
     """
+
+
 
 # ─── 그래프 생성 함수 ───────────────────────────────────────────────
 def create_figure(period: str):
