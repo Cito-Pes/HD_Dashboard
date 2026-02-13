@@ -193,6 +193,7 @@ class DashboardWindow(QWidget):
                                 AND me.MemType ='접수'
                                 AND REPLACE(me.Rec_Date,'-','') >=  '{self.FromDate}'
                                 AND REPLACE(me.Rec_Date,'-','') <= '{self.ToDate}'
+                                and gu.Goods_ID not like '%EV%'
                             GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5) --x1 ON st.SaBun = x1.Charge_IDP
                             union all
                             (SELECT me.Charge_IDP, me.MemberNo, 0 AS cnt1, CASE gu.G_etc_str5 WHEN 4 THEN count(me.ID)*0.25 WHEN 2 THEN count(me.ID)*0.5 END AS cnt2,0 AS cnt3, 0 AS cnt4
@@ -201,6 +202,7 @@ class DashboardWindow(QWidget):
                                 AND me.MemType in ('정상','만기','행사')
                                 AND REPLACE(me.Rec_Date,'-','') >=  '{self.FromDate}'
                                 AND REPLACE(me.Rec_Date,'-','') <= '{self.ToDate}'
+                                and gu.Goods_ID not like '%EV%'
                             GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5) --x2 ON st.SaBun = x2.Charge_IDP
                             ) x ON st.SaBun = x.Charge_IDP
                             GROUP BY st.SaName	
@@ -244,6 +246,7 @@ class DashboardWindow(QWidget):
                     and me.TotPay > 0 
                     and a.id is null
                     and me.reg_date >='2024-01-01'
+                    and gu.Goods_ID not like '%EV%'
                     union all
                     select me.TotPay , gu.Cash_Month, me.id, me.name, me.reg_date, st.SaName, st.SaBun, case gu.G_etc_str5 when 4 then 1 when 2 then 2 end xx
                     from member me
@@ -255,6 +258,7 @@ class DashboardWindow(QWidget):
                     and me.TotPay > 0 
                     and a.id is null
                     and me.reg_date >='2024-01-01'
+                    and gu.Goods_ID not like '%EV%'
                     ) x
                     group by x.SaName
                  """
