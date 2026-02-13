@@ -140,6 +140,7 @@ def make_sql(period: str):
                                     AND a.id IS NULL
                                     AND me.reg_date >= '2024-01-01'
                                     and st.OutDate = '' 
+                                    and gu.Goods_ID not like '%EV%'
 
                                   UNION ALL
 
@@ -160,6 +161,7 @@ def make_sql(period: str):
                                     AND a.id IS NULL
                                     AND me.reg_date >= '2024-01-01'
                                     and st.OutDate = '' 
+                                    and gu.Goods_ID not like '%EV%'
                                 ) x
                                 GROUP BY x.SaName
                                 --
@@ -205,6 +207,7 @@ def make_sql(period: str):
                     AND a.id IS NULL
                     AND me.reg_date >= '2024-01-01'
                     and st.OutDate = '' 
+                    and gu.Goods_ID not like '%EV%'
     
                   UNION ALL
     
@@ -225,6 +228,7 @@ def make_sql(period: str):
                     AND a.id IS NULL
                     AND me.reg_date >= '2024-01-01'
                     and st.OutDate = '' 
+                    and gu.Goods_ID not like '%EV%'
                 ) x
                 GROUP BY x.SaName
                 --
@@ -253,6 +257,7 @@ def make_sql(period: str):
            WHERE me.EventType IN ('여행','크루즈')
              AND me.MemType='접수'
              AND REPLACE(me.Rec_Date,'-','') BETWEEN '{FromDate}' AND '{ToDate}'
+             and gu.Goods_ID not like '%EV%'
            GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5)
 
           UNION ALL
@@ -266,6 +271,7 @@ def make_sql(period: str):
            WHERE me.EventType IN ('여행','크루즈')
              AND me.MemType IN ('정상','만기','행사')
              AND REPLACE(me.Rec_Date,'-','') BETWEEN '{FromDate}' AND '{ToDate}'
+             and gu.Goods_ID not like '%EV%'
            GROUP BY me.Charge_IDP, me.MemberNo, gu.G_etc_str5)
         ) x
         ON st.SaBun = x.Charge_IDP
